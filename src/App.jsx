@@ -6,10 +6,11 @@ import gsap from 'gsap';
 import { 
   Menu, ShoppingCart, User, Heart, Sparkles, 
   Database, Server, Bot, Code, Box, X, Plus, Minus, ArrowLeft, CheckCircle2, CreditCard,
-  Droplet, Shield, Zap, Activity, Leaf, ChevronLeft, ChevronRight
+  Droplet, Shield, Zap, Activity, Leaf, ChevronLeft, ChevronRight,
+  Trash2, Edit3, PlusCircle
 } from 'lucide-react';
 import { app, db, auth, storage, functions } from './firebase';
-import { collection, doc, setDoc, getDocs, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Stripe Client Promise
@@ -522,6 +523,12 @@ const MobileMenuDrawer = ({ isOpen, onClose, activeView, setActiveView }) => {
             Benefits
           </span>
           <span 
+            className={`mobile-menu-link ${activeView === 'admin' ? 'active' : ''}`}
+            onClick={() => handleLinkClick('admin')}
+          >
+            Admin
+          </span>
+          <span 
             className="mobile-menu-link"
             onClick={() => handleLinkClick('shop')}
           >
@@ -774,6 +781,316 @@ const BenefitsView = ({ setView }) => {
 };
 
 // ==========================================
+// 3.5. PRODUCT MANAGEMENT ADMIN DASHBOARD
+// ==========================================
+const AdminPanel = ({ productsList, setProductsList }) => {
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [name, setName] = useState('');
+  const [flavor, setFlavor] = useState('');
+  const [price, setPrice] = useState('');
+  const [color, setColor] = useState('#d4af37');
+  const [description, setDescription] = useState('');
+  const [calories, setCalories] = useState('');
+  const [carbs, setCarbs] = useState('');
+  const [minerals, setMinerals] = useState('');
+  const [sodium, setSodium] = useState('');
+  const [potassium, setPotassium] = useState('');
+  const [calcium, setCalcium] = useState('');
+  const [feature3D, setFeature3D] = useState(true);
+
+  const handleEditClick = (product) => {
+    setEditingProduct(product);
+    setName(product.name || '');
+    setFlavor(product.flavor || '');
+    setPrice(String(product.price || ''));
+    setColor(product.color || '#d4af37');
+    setDescription(product.description || '');
+    setCalories(product.nutrition?.calories || '');
+    setCarbs(product.nutrition?.carbohydrates || '');
+    setMinerals(product.nutrition?.minerals || '');
+    setSodium(product.nutrition?.sodium || '');
+    setPotassium(product.nutrition?.potassium || '');
+    setCalcium(product.nutrition?.calcium || '');
+    setFeature3D(product.feature3D !== false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleClear = () => {
+    setEditingProduct(null);
+    setName('');
+    setFlavor('');
+    setPrice('');
+    setColor('#d4af37');
+    setDescription('');
+    setCalories('');
+    setCarbs('');
+    setMinerals('');
+    setSodium('');
+    setPotassium('');
+    setCalcium('');
+    setFeature3D(true);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!name || !flavor || !price || !description || !color) {
+      alert("Please fill out all required basic fields.");
+      return;
+    }
+    const numericPrice = parseFloat(price);
+    if (isNaN(numericPrice) || numericPrice <= 0) {
+      alert("Please enter a valid positive price.");
+      return;
+    }
+
+    const productData = {
+      name,
+      flavor,
+      price: numericPrice,
+      color,
+      description,
+      feature3D,
+      nutrition: {
+        calories: calories || "N/A",
+        carbohydrates: carbs || "N/A",
+        minerals: minerals || "N/A",
+        sodium: sodium || "N/A",
+        potassium: potassium || "N/A",
+        calcium: calcium || "N/A"
+      }
+    };
+
+    try {
+      if (editingProduct) {
+        const updatedProduct = {
+          ...productData,
+          id: editingProduct.id
+        };
+        await setDoc(doc(db, "products", String(editingProduct.id)), updatedProduct);
+        setProductsList(prev => prev.map(p => p.id === editingProduct.id ? updatedProduct : p));
+        alert("Product updated successfully!");
+      } else {
+        const nextId = productsList.length > 0 
+          ? Math.max(...productsList.map(p => p.id)) + 1 
+          : 1;
+        const newProduct = {
+          ...productData,
+          id: nextId
+        };
+        await setDoc(doc(db, "products", String(nextId)), newProduct);
+        setProductsList(prev => [...prev, newProduct]);
+        alert("Product added successfully!");
+      }
+      handleClear();
+    } catch (err) {
+      console.error("Error saving product: ", err);
+      alert("Failed to save product. Check console for details.");
+    }
+  };
+
+  const handleDelete = async (productId) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "products", String(productId)));
+      setProductsList(prev => prev.filter(p => p.id !== productId));
+      alert("Product deleted successfully!");
+      if (editingProduct && editingProduct.id === productId) {
+        handleClear();
+      }
+    } catch (err) {
+      console.error("Error deleting product: ", err);
+      alert("Failed to delete product.");
+    }
+  };
+
+  return (
+    <div className="admin-dashboard animate-fade-in">
+      <div className="admin-header">
+        <h2>Product Management <span>Dashboard</span></h2>
+        <p>Add, edit, or delete organic Sea Moss blends in Firestore</p>
+      </div>
+
+      <div className="admin-grid">
+        {/* Editor Form Card */}
+        <div className="admin-card">
+          <h3 className="admin-card-title">
+            {editingProduct ? <><Edit3 size={18} /> Edit Product</> : <><PlusCircle size={18} /> Add New Product</>}
+          </h3>
+          
+          <form onSubmit={handleSave} className="admin-form">
+            <div className="admin-form-group">
+              <label>Product Name *</label>
+              <input 
+                type="text" 
+                value={name} 
+                onChange={e => setName(e.target.value)} 
+                placeholder="e.g. Golden Sun Gel" 
+                required 
+              />
+            </div>
+
+            <div className="admin-form-group">
+              <label>Flavor / Blend Subtitle *</label>
+              <input 
+                type="text" 
+                value={flavor} 
+                onChange={e => setFlavor(e.target.value)} 
+                placeholder="e.g. Organic Mango & Pineapple" 
+                required 
+              />
+            </div>
+
+            <div className="admin-two-cols">
+              <div className="admin-form-group">
+                <label>Price ($) *</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={price} 
+                  onChange={e => setPrice(e.target.value)} 
+                  placeholder="28.99" 
+                  required 
+                />
+              </div>
+              
+              <div className="admin-form-group">
+                <label>Jar Color (Hex) *</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input 
+                    type="color" 
+                    value={color} 
+                    onChange={e => setColor(e.target.value)}
+                    style={{ width: '40px', height: '40px', padding: 0, border: 'none', cursor: 'pointer', borderRadius: '4px', background: 'none' }}
+                  />
+                  <input 
+                    type="text" 
+                    value={color} 
+                    onChange={e => setColor(e.target.value)} 
+                    placeholder="#d4af37" 
+                    style={{ flexGrow: 1 }}
+                    required 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-form-group">
+              <label>Description *</label>
+              <textarea 
+                value={description} 
+                onChange={e => setDescription(e.target.value)} 
+                placeholder="Describe the flavor profile, ingredients, and health benefits..." 
+                rows={4}
+                required 
+              />
+            </div>
+
+            <div className="admin-form-group checkbox-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={feature3D} 
+                  onChange={e => setFeature3D(e.target.checked)} 
+                />
+                Enable 3D Mason Jar Canvas Preview
+              </label>
+            </div>
+
+            <div className="nutrition-section-header">
+              <h4>Nutritional Profile</h4>
+              <p>Provide values representing a single tablespoon serving</p>
+            </div>
+
+            <div className="admin-three-cols">
+              <div className="admin-form-group">
+                <label>Calories</label>
+                <input type="text" value={calories} onChange={e => setCalories(e.target.value)} placeholder="e.g. 20 kcal" />
+              </div>
+              <div className="admin-form-group">
+                <label>Carbs</label>
+                <input type="text" value={carbs} onChange={e => setCarbs(e.target.value)} placeholder="e.g. 5g" />
+              </div>
+              <div className="admin-form-group">
+                <label>Minerals</label>
+                <input type="text" value={minerals} onChange={e => setMinerals(e.target.value)} placeholder="e.g. 92 essential" />
+              </div>
+            </div>
+
+            <div className="admin-three-cols">
+              <div className="admin-form-group">
+                <label>Sodium</label>
+                <input type="text" value={sodium} onChange={e => setSodium(e.target.value)} placeholder="e.g. 15mg" />
+              </div>
+              <div className="admin-form-group">
+                <label>Potassium</label>
+                <input type="text" value={potassium} onChange={e => setPotassium(e.target.value)} placeholder="e.g. 85mg" />
+              </div>
+              <div className="admin-form-group">
+                <label>Calcium</label>
+                <input type="text" value={calcium} onChange={e => setCalcium(e.target.value)} placeholder="e.g. 1.5%" />
+              </div>
+            </div>
+
+            <div className="admin-actions">
+              <button type="submit" className="btn btn-primary">
+                {editingProduct ? "Update Product" : "Add Product"}
+              </button>
+              <button type="button" className="btn btn-outline" onClick={handleClear} style={{ background: 'none', border: '1px solid var(--card-border)' }}>
+                Cancel / Clear
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Catalog Manager List Card */}
+        <div className="admin-card">
+          <h3 className="admin-card-title">Catalog Inventory ({productsList.length})</h3>
+          
+          <div className="admin-products-list">
+            {productsList.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No products found in catalog.</p>
+            ) : (
+              productsList.map(prod => (
+                <div key={prod.id} className="admin-product-row">
+                  <div className="admin-prod-preview" style={{ backgroundColor: prod.color }} title={`Color: ${prod.color}`}></div>
+                  
+                  <div className="admin-prod-info">
+                    <h4 className="admin-prod-name">{prod.name}</h4>
+                    <p className="admin-prod-flavor">{prod.flavor}</p>
+                    <span className="admin-prod-price">${prod.price?.toFixed(2)}</span>
+                  </div>
+
+                  <div className="admin-prod-actions">
+                    <button 
+                      type="button"
+                      className="admin-action-btn edit" 
+                      onClick={() => handleEditClick(prod)} 
+                      title="Edit Product"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+                    <button 
+                      type="button"
+                      className="admin-action-btn delete" 
+                      onClick={() => handleDelete(prod.id)} 
+                      title="Delete Product"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
 // 4. MAIN APP CONTAINER
 // ==========================================
 
@@ -921,6 +1238,7 @@ const App = () => {
             <div className="nav-links">
               <span className={`nav-link ${activeView === 'shop' ? 'active' : ''}`} onClick={() => setActiveView('shop')}>Shop</span>
               <span className={`nav-link ${activeView === 'benefits' ? 'active' : ''}`} onClick={() => setActiveView('benefits')}>Benefits</span>
+              <span className={`nav-link ${activeView === 'admin' ? 'active' : ''}`} onClick={() => setActiveView('admin')}>Admin</span>
             </div>
           </div>
           
@@ -1055,6 +1373,12 @@ const App = () => {
       {activeView === 'benefits' && (
         <div className="app-container">
           <BenefitsView setView={setActiveView} />
+        </div>
+      )}
+
+      {activeView === 'admin' && (
+        <div className="app-container">
+          <AdminPanel productsList={productsList} setProductsList={setProductsList} />
         </div>
       )}
 
