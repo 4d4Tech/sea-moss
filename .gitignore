@@ -18,7 +18,12 @@ dist-ssr
 .idea
 .DS_Store
 *.suo
+.firebase
+.firebase/
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.env
+.env.local
+functions/.env

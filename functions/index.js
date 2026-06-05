@@ -1,32 +1,38 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
+const { onRequest } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
+const { setGlobalOptions } = require("firebase-functions");
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
+// Load the local .env file containing the STRIPE_SECRET_KEY
+require("dotenv").config();
+
+// Initialize Stripe with the loaded secret key
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 setGlobalOptions({ maxInstances: 10 });
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+// HTTP endpoint to create a PaymentIntent
+exports.createPaymentIntent = onRequest({ cors: true }, async (req, res) => {
+  try {
+    const { amount } = req.body;
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+    if (!amount || amount <= 0) {
+      res.status(400).json({ error: "Invalid amount" });
+      return;
+    }
+
+    // Create a PaymentIntent with the specified amount and currency
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // convert to cents (e.g. 29.99 -> 2999)
+      currency: "usd",
+      metadata: { integration_check: "accept_a_payment" },
+    });
+
+    // Send the clientSecret to the frontend
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (error) {
+    logger.error("Error creating PaymentIntent:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
